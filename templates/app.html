@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="/static/icon-192.png">
 <title>GritTrack by Rustler Ranch</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg:       #1A1A18;
@@ -90,7 +90,7 @@
   .header-left { flex: 1; }
   .app-wordmark { line-height: 1; }
   .brand-name {
-    font-family: 'Bebas Neue', sans-serif;
+    font-family: 'Anton', sans-serif;
     font-size: 26px; letter-spacing: 4px;
     color: var(--flame); display: inline-block;
   }
@@ -190,6 +190,33 @@
   .tap-btn.stop { border-color: var(--danger); color: var(--danger); }
   .tap-btn.stop:active { background: var(--danger); color: #fff; }
   .tap-btn.reset:active { background: var(--elevated); }
+
+  /* ── SOUND SELECTOR ── */
+  .sound-row {
+    display: flex; align-items: center; justify-content: center;
+    gap: 10px; margin-top: 10px; padding-top: 9px;
+    border-top: 1px solid rgba(200,101,42,0.1);
+  }
+  .sound-row-label {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 13px; letter-spacing: 3px; color: var(--muted);
+    white-space: nowrap;
+  }
+  .sound-btns { display: flex; gap: 6px; }
+  .sound-btn {
+    background: var(--elevated); border: 1.5px solid var(--border);
+    border-radius: 7px; font-size: 17px;
+    width: 38px; height: 38px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s; flex-shrink: 0;
+  }
+  .sound-btn.active { border-color: var(--copper); background: rgba(200,101,42,0.15); }
+  .sound-btn:active { transform: scale(0.9); }
+  .sound-btn.off-btn {
+    font-family: 'Inter', sans-serif; font-size: 13px;
+    font-weight: 700; color: var(--muted); letter-spacing: 1px;
+  }
+  .sound-btn.off-btn.active { color: var(--danger); border-color: var(--danger); background: rgba(217,64,64,0.1); }
 
   /* ── MAIN SCROLL ── */
   .main-scroll { padding: 0 0 80px; }
@@ -499,6 +526,16 @@
       </div>
     </div>
   </div>
+  <div class="sound-row">
+    <span class="sound-row-label">Alert</span>
+    <div class="sound-btns">
+      <button class="sound-btn active" id="snd-bell"    onclick="setSound('bell',this)"    title="Ship Bell">🔔</button>
+      <button class="sound-btn"        id="snd-axe"     onclick="setSound('axe',this)"     title="Axe Chop">🪓</button>
+      <button class="sound-btn"        id="snd-thunder" onclick="setSound('thunder',this)" title="Thunderclap">⚡</button>
+      <button class="sound-btn"        id="snd-snap"    onclick="setSound('snap',this)"    title="Timber Snap">🪵</button>
+      <button class="sound-btn off-btn" id="snd-off"   onclick="setSound('off',this)"     title="Off">OFF</button>
+    </div>
+  </div>
 </div>
 
 <!-- TOAST -->
@@ -656,7 +693,7 @@ function startTimer() {
       document.getElementById('timerDisplay').textContent = 'DONE';
       document.getElementById('timerDisplay').className = 'timer-display';
       if (activeTimerBtn) { activeTimerBtn.classList.remove('active'); activeTimerBtn = null; }
-      if ('vibrate' in navigator) navigator.vibrate([300, 100, 300]);
+      playTimerAlert();
       showToast('REST COMPLETE — GET BACK ON IT');
       return;
     }
@@ -755,8 +792,8 @@ function renderLifts() {
         <div class="card-meta-field">
           <span class="card-meta-label">Sets</span>
           <input class="sets-input" type="number" inputmode="numeric" min="1" max="20"
-            value="${lift.sets.length}" placeholder="3"
-            onchange="resizeSets(${li},parseInt(this.value)||1)">
+            value="${lift.sets.length || ''}" placeholder="sets"
+            onchange="resizeSets(${li},parseInt(this.value)||0)">
         </div>
         ${prevBadge}
       </div>
@@ -866,7 +903,7 @@ function updateSessionNav() {
 // LIFT CRUD
 // ══════════════════════════════════════════════
 function addLift() {
-  currentSession.lifts.push({ exercise: '', sets: [newSet()] });
+  currentSession.lifts.push({ exercise: '', sets: [] });
   renderLifts();
   setTimeout(() => {
     const cards = document.querySelectorAll('#liftList .workout-card');
@@ -875,7 +912,7 @@ function addLift() {
 }
 function removeLift(li) { currentSession.lifts.splice(li, 1); renderLifts(); }
 function onExerciseChange(li, name) {
-  const prevCount = currentSession.lifts[li].sets.length || 3;
+  const prevCount = currentSession.lifts[li].sets.length || 0;
   currentSession.lifts[li].exercise = name;
   currentSession.lifts[li].sets = Array.from({ length: prevCount }, () => newSet());
   renderLifts();
@@ -1009,6 +1046,126 @@ function showToast(msg) {
 }
 
 // ══════════════════════════════════════════════
+// SOUND SYSTEM
+// ══════════════════════════════════════════════
+let selectedSound = localStorage.getItem('gt_sound') || 'bell';
+let audioCtx = null;
+
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+function setSound(sound, btn) {
+  selectedSound = sound;
+  localStorage.setItem('gt_sound', sound);
+  document.querySelectorAll('.sound-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (sound !== 'off') previewSound(sound);
+}
+
+function previewSound(sound) {
+  try {
+    const ctx = getAudioCtx();
+    switch(sound) {
+      case 'bell':    playShipBell(ctx);    break;
+      case 'axe':     playAxeChop(ctx);     break;
+      case 'thunder': playThunderclap(ctx); break;
+      case 'snap':    playTimberSnap(ctx);  break;
+    }
+  } catch(e) {}
+}
+
+function playTimerAlert() {
+  if ('vibrate' in navigator) navigator.vibrate([300, 100, 300]);
+  if (selectedSound !== 'off') previewSound(selectedSound);
+}
+
+function makeNoise(ctx, duration) {
+  const bufSize = Math.floor(ctx.sampleRate * duration);
+  const buf  = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  return src;
+}
+
+function playShipBell(ctx) {
+  const t = ctx.currentTime;
+  [[220, 0.7], [440, 0.5], [880, 0.25], [1320, 0.12]].forEach(([freq, vol]) => {
+    const osc = ctx.createOscillator();
+    const env = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    env.gain.setValueAtTime(vol, t);
+    env.gain.exponentialRampToValueAtTime(0.001, t + 3.5);
+    osc.connect(env); env.connect(ctx.destination);
+    osc.start(t); osc.stop(t + 3.5);
+  });
+}
+
+function playAxeChop(ctx) {
+  const t = ctx.currentTime;
+  // Woody thud
+  const osc  = ctx.createOscillator();
+  const oEnv = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(130, t);
+  osc.frequency.exponentialRampToValueAtTime(40, t + 0.18);
+  oEnv.gain.setValueAtTime(1.0, t);
+  oEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+  osc.connect(oEnv); oEnv.connect(ctx.destination);
+  osc.start(t); osc.stop(t + 0.25);
+  // Noise crack on top
+  const noise  = makeNoise(ctx, 0.3);
+  const filter = ctx.createBiquadFilter();
+  const nEnv   = ctx.createGain();
+  filter.type = 'bandpass'; filter.frequency.value = 700; filter.Q.value = 0.7;
+  nEnv.gain.setValueAtTime(1.2, t);
+  nEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+  noise.connect(filter); filter.connect(nEnv); nEnv.connect(ctx.destination);
+  noise.start(t);
+}
+
+function playThunderclap(ctx) {
+  const t     = ctx.currentTime;
+  const noise = makeNoise(ctx, 2.2);
+  const lp    = ctx.createBiquadFilter();
+  const env   = ctx.createGain();
+  lp.type = 'lowpass'; lp.frequency.value = 160;
+  env.gain.setValueAtTime(0.001, t);
+  env.gain.linearRampToValueAtTime(1.3, t + 0.07);
+  env.gain.exponentialRampToValueAtTime(0.4, t + 0.5);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 2.2);
+  noise.connect(lp); lp.connect(env); env.connect(ctx.destination);
+  noise.start(t);
+}
+
+function playTimberSnap(ctx) {
+  const t     = ctx.currentTime;
+  const noise = makeNoise(ctx, 0.14);
+  const hp    = ctx.createBiquadFilter();
+  const env   = ctx.createGain();
+  hp.type = 'highpass'; hp.frequency.value = 1400;
+  env.gain.setValueAtTime(1.6, t);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 0.13);
+  noise.connect(hp); hp.connect(env); env.connect(ctx.destination);
+  noise.start(t);
+}
+
+function initSoundUI() {
+  const saved = localStorage.getItem('gt_sound') || 'bell';
+  selectedSound = saved;
+  const btn = document.getElementById(`snd-${saved}`);
+  if (btn) {
+    document.querySelectorAll('.sound-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+}
+
+// ══════════════════════════════════════════════
 // AUTH
 // ══════════════════════════════════════════════
 async function logout() {
@@ -1031,6 +1188,7 @@ async function init() {
   overlay.classList.add('hidden');
   setTimeout(() => overlay.remove(), 350);
   renderAll();
+  initSoundUI();
 }
 
 // ══════════════════════════════════════════════
