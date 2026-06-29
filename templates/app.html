@@ -14,14 +14,14 @@
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg:       #1A1A18;
-    --surface:  #242420;
-    --elevated: #2E2E28;
+    --bg:       #191B1E;
+    --surface:  #22252B;
+    --elevated: #2C3038;
     --copper:   #C8652A;
     --flame:    #E8873A;
     --saddle:   #8B5E3C;
     --text:     #F0EDE8;
-    --muted:    #7A7570;
+    --muted:    #70787E;
     --danger:   #D94040;
     --success:  #5A9A5A;
     --border:   rgba(200,101,42,0.18);
@@ -69,9 +69,9 @@
 
   /* ── CAMO DIVIDER ── */
   .camo-divider {
-    width: 100%; height: 28px;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='28'%3E%3Crect width='120' height='28' fill='%23242420'/%3E%3Cellipse cx='15' cy='10' rx='14' ry='8' fill='%231e2018' opacity='.9'/%3E%3Cellipse cx='55' cy='6' rx='18' ry='7' fill='%23252a1c' opacity='.85'/%3E%3Cellipse cx='95' cy='12' rx='12' ry='9' fill='%231a1e14' opacity='.8'/%3E%3Cellipse cx='35' cy='20' rx='16' ry='7' fill='%23202418' opacity='.75'/%3E%3Cellipse cx='75' cy='22' rx='20' ry='6' fill='%231e2316' opacity='.7'/%3E%3Cellipse cx='110' cy='18' rx='11' ry='8' fill='%23232818' opacity='.65'/%3E%3Cellipse cx='5' cy='24' rx='8' ry='5' fill='%231c201a' opacity='.6'/%3E%3C/svg%3E");
-    background-repeat: repeat-x; background-size: 120px 28px;
+    width: 100%; height: 38px;
+    background-image: url('/static/camo.svg');
+    background-repeat: repeat-x; background-size: 300px 38px;
     position: relative; flex-shrink: 0;
   }
   .camo-divider::after {
@@ -529,11 +529,9 @@
   <div class="sound-row">
     <span class="sound-row-label">Alert</span>
     <div class="sound-btns">
-      <button class="sound-btn active" id="snd-bell"    onclick="setSound('bell',this)"    title="Ship Bell">🔔</button>
-      <button class="sound-btn"        id="snd-axe"     onclick="setSound('axe',this)"     title="Axe Chop">🪓</button>
-      <button class="sound-btn"        id="snd-thunder" onclick="setSound('thunder',this)" title="Thunderclap">⚡</button>
-      <button class="sound-btn"        id="snd-snap"    onclick="setSound('snap',this)"    title="Timber Snap">🪵</button>
-      <button class="sound-btn off-btn" id="snd-off"   onclick="setSound('off',this)"     title="Off">OFF</button>
+      <button class="sound-btn active" id="snd-sound"   onclick="setSound('sound',this)"   title="Whistle">🔊</button>
+      <button class="sound-btn"        id="snd-vibrate" onclick="setSound('vibrate',this)" title="Vibrate Only">📳</button>
+      <button class="sound-btn off-btn" id="snd-off"    onclick="setSound('off',this)"     title="Off">OFF</button>
     </div>
   </div>
 </div>
@@ -663,17 +661,23 @@ setInterval(updateClock, 1000);
 // TIMER
 // ══════════════════════════════════════════════
 let timerTotal = 0, timerRemaining = 0, timerInterval = null, timerRunning = false;
+let timerEndTime = null;
 let activeTimerBtn = null;
 
 function setTimer(minutes, btn) {
   clearInterval(timerInterval);
-  timerRunning = false;
+  timerRunning = false; timerEndTime = null;
+  localStorage.removeItem('gt_timer_end');
+  cancelScheduledNotification();
   if (activeTimerBtn) activeTimerBtn.classList.remove('active');
   timerTotal = minutes * 60;
   timerRemaining = timerTotal;
   activeTimerBtn = btn;
   btn.classList.add('active');
   updateTimerDisplay();
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
   startTimer();
 }
 function updateTimerDisplay() {
@@ -687,35 +691,67 @@ function updateTimerDisplay() {
 function startTimer() {
   if (!timerTotal || timerRunning) return;
   timerRunning = true;
-  timerInterval = setInterval(() => {
-    if (timerRemaining <= 0) {
-      clearInterval(timerInterval); timerRunning = false;
-      document.getElementById('timerDisplay').textContent = 'DONE';
-      document.getElementById('timerDisplay').className = 'timer-display';
-      if (activeTimerBtn) { activeTimerBtn.classList.remove('active'); activeTimerBtn = null; }
-      playTimerAlert();
-      showToast('REST COMPLETE — GET BACK ON IT');
-      return;
-    }
-    timerRemaining--;
+  timerEndTime = Date.now() + (timerRemaining * 1000);
+  localStorage.setItem('gt_timer_end', String(timerEndTime));
+  scheduleNotification(timerRemaining);
+  timerInterval = setInterval(timerTick, 500);
+}
+function timerTick() {
+  const remaining = Math.max(0, Math.ceil((timerEndTime - Date.now()) / 1000));
+  if (remaining <= 0) { timerDone(); return; }
+  if (remaining !== timerRemaining) {
+    timerRemaining = remaining;
     updateTimerDisplay();
-  }, 1000);
+  }
+}
+function timerDone() {
+  clearInterval(timerInterval);
+  timerRunning = false; timerEndTime = null;
+  localStorage.removeItem('gt_timer_end');
+  document.getElementById('timerDisplay').textContent = 'DONE';
+  document.getElementById('timerDisplay').className = 'timer-display';
+  if (activeTimerBtn) { activeTimerBtn.classList.remove('active'); activeTimerBtn = null; }
+  playTimerAlert();
+  showToast('REST COMPLETE — GET BACK ON IT');
 }
 function pauseTimer() {
-  clearInterval(timerInterval); timerRunning = false;
+  clearInterval(timerInterval);
+  timerRunning = false; timerEndTime = null;
+  localStorage.removeItem('gt_timer_end');
+  cancelScheduledNotification();
   if (timerRemaining > 0) updateTimerDisplay();
 }
 function resetTimer() {
-  clearInterval(timerInterval); timerRunning = false;
-  timerRemaining = timerTotal;
-  if (timerTotal) updateTimerDisplay();
-  else {
-    document.getElementById('timerDisplay').textContent = '–:––';
-    document.getElementById('timerDisplay').className = 'timer-display';
-  }
-  if (activeTimerBtn) { activeTimerBtn.classList.remove('active'); activeTimerBtn = null; }
+  clearInterval(timerInterval);
+  timerRunning = false; timerEndTime = null;
+  localStorage.removeItem('gt_timer_end');
+  cancelScheduledNotification();
   timerTotal = 0; timerRemaining = 0;
+  document.getElementById('timerDisplay').textContent = '–:––';
+  document.getElementById('timerDisplay').className = 'timer-display';
+  if (activeTimerBtn) { activeTimerBtn.classList.remove('active'); activeTimerBtn = null; }
 }
+
+// Resync timer when returning from background
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  const savedEnd = localStorage.getItem('gt_timer_end');
+  if (!savedEnd) return;
+  timerEndTime = parseInt(savedEnd);
+  const remaining = Math.max(0, Math.ceil((timerEndTime - Date.now()) / 1000));
+  if (remaining <= 0) {
+    timerRunning = true; // so timerDone resets correctly
+    timerDone();
+  } else {
+    timerRemaining = remaining;
+    if (!timerRunning) {
+      timerRunning = true;
+      clearInterval(timerInterval);
+      timerInterval = setInterval(timerTick, 500);
+    }
+    updateTimerDisplay();
+  }
+});
 
 // ══════════════════════════════════════════════
 // SELECT OPTION BUILDERS
@@ -1048,13 +1084,15 @@ function showToast(msg) {
 // ══════════════════════════════════════════════
 // SOUND SYSTEM
 // ══════════════════════════════════════════════
-let selectedSound = localStorage.getItem('gt_sound') || 'bell';
-let audioCtx = null;
+let selectedSound = localStorage.getItem('gt_sound') || 'sound';
+let alertAudio = null;
 
-function getAudioCtx() {
-  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  if (audioCtx.state === 'suspended') audioCtx.resume();
-  return audioCtx;
+function getAlertAudio() {
+  if (!alertAudio) {
+    alertAudio = new Audio('/static/alert.wav');
+    alertAudio.preload = 'auto';
+  }
+  return alertAudio;
 }
 
 function setSound(sound, btn) {
@@ -1062,107 +1100,54 @@ function setSound(sound, btn) {
   localStorage.setItem('gt_sound', sound);
   document.querySelectorAll('.sound-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  if (sound !== 'off') previewSound(sound);
-}
-
-function previewSound(sound) {
-  try {
-    const ctx = getAudioCtx();
-    switch(sound) {
-      case 'bell':    playShipBell(ctx);    break;
-      case 'axe':     playAxeChop(ctx);     break;
-      case 'thunder': playThunderclap(ctx); break;
-      case 'snap':    playTimberSnap(ctx);  break;
-    }
-  } catch(e) {}
+  if (sound === 'sound') {
+    const audio = getAlertAudio();
+    audio.currentTime = 0;
+    audio.play().catch(() => {});
+  } else if (sound === 'vibrate') {
+    if ('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
+  }
 }
 
 function playTimerAlert() {
-  if ('vibrate' in navigator) navigator.vibrate([300, 100, 300]);
-  if (selectedSound !== 'off') previewSound(selectedSound);
+  if (selectedSound === 'sound') {
+    if ('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
+    const audio = getAlertAudio();
+    audio.currentTime = 0;
+    audio.play().catch(() => {});
+  } else if (selectedSound === 'vibrate') {
+    if ('vibrate' in navigator) navigator.vibrate([400, 200, 400, 200, 400]);
+  }
 }
 
-function makeNoise(ctx, duration) {
-  const bufSize = Math.floor(ctx.sampleRate * duration);
-  const buf  = ctx.createBuffer(1, bufSize, ctx.sampleRate);
-  const data = buf.getChannelData(0);
-  for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
-  const src = ctx.createBufferSource();
-  src.buffer = buf;
-  return src;
+function scheduleNotification(seconds) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  navigator.serviceWorker.ready.then(reg => {
+    if (reg.active) reg.active.postMessage({
+      type: 'SCHEDULE_TIMER',
+      delay: seconds * 1000,
+      title: 'GritTrack',
+      body: 'REST COMPLETE — GET BACK ON IT 💪'
+    });
+  }).catch(() => {});
 }
 
-function playShipBell(ctx) {
-  const t = ctx.currentTime;
-  [[220, 0.7], [440, 0.5], [880, 0.25], [1320, 0.12]].forEach(([freq, vol]) => {
-    const osc = ctx.createOscillator();
-    const env = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.value = freq;
-    env.gain.setValueAtTime(vol, t);
-    env.gain.exponentialRampToValueAtTime(0.001, t + 3.5);
-    osc.connect(env); env.connect(ctx.destination);
-    osc.start(t); osc.stop(t + 3.5);
-  });
-}
-
-function playAxeChop(ctx) {
-  const t = ctx.currentTime;
-  // Woody thud
-  const osc  = ctx.createOscillator();
-  const oEnv = ctx.createGain();
-  osc.type = 'sine';
-  osc.frequency.setValueAtTime(130, t);
-  osc.frequency.exponentialRampToValueAtTime(40, t + 0.18);
-  oEnv.gain.setValueAtTime(1.0, t);
-  oEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
-  osc.connect(oEnv); oEnv.connect(ctx.destination);
-  osc.start(t); osc.stop(t + 0.25);
-  // Noise crack on top
-  const noise  = makeNoise(ctx, 0.3);
-  const filter = ctx.createBiquadFilter();
-  const nEnv   = ctx.createGain();
-  filter.type = 'bandpass'; filter.frequency.value = 700; filter.Q.value = 0.7;
-  nEnv.gain.setValueAtTime(1.2, t);
-  nEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
-  noise.connect(filter); filter.connect(nEnv); nEnv.connect(ctx.destination);
-  noise.start(t);
-}
-
-function playThunderclap(ctx) {
-  const t     = ctx.currentTime;
-  const noise = makeNoise(ctx, 2.2);
-  const lp    = ctx.createBiquadFilter();
-  const env   = ctx.createGain();
-  lp.type = 'lowpass'; lp.frequency.value = 160;
-  env.gain.setValueAtTime(0.001, t);
-  env.gain.linearRampToValueAtTime(1.3, t + 0.07);
-  env.gain.exponentialRampToValueAtTime(0.4, t + 0.5);
-  env.gain.exponentialRampToValueAtTime(0.001, t + 2.2);
-  noise.connect(lp); lp.connect(env); env.connect(ctx.destination);
-  noise.start(t);
-}
-
-function playTimberSnap(ctx) {
-  const t     = ctx.currentTime;
-  const noise = makeNoise(ctx, 0.14);
-  const hp    = ctx.createBiquadFilter();
-  const env   = ctx.createGain();
-  hp.type = 'highpass'; hp.frequency.value = 1400;
-  env.gain.setValueAtTime(1.6, t);
-  env.gain.exponentialRampToValueAtTime(0.001, t + 0.13);
-  noise.connect(hp); hp.connect(env); env.connect(ctx.destination);
-  noise.start(t);
+function cancelScheduledNotification() {
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.ready.then(reg => {
+    if (reg.active) reg.active.postMessage({ type: 'CANCEL_TIMER' });
+  }).catch(() => {});
 }
 
 function initSoundUI() {
-  const saved = localStorage.getItem('gt_sound') || 'bell';
+  const saved = localStorage.getItem('gt_sound') || 'sound';
   selectedSound = saved;
   const btn = document.getElementById(`snd-${saved}`);
   if (btn) {
     document.querySelectorAll('.sound-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
   }
+  getAlertAudio(); // pre-load
 }
 
 // ══════════════════════════════════════════════

@@ -19,6 +19,27 @@ self.addEventListener('activate', e => {
   self.clients.claim();
 });
 
+// Timer notification scheduling
+let timerTimeout = null;
+self.addEventListener('message', e => {
+  if (!e.data) return;
+  if (e.data.type === 'SCHEDULE_TIMER') {
+    if (timerTimeout) { clearTimeout(timerTimeout); timerTimeout = null; }
+    timerTimeout = setTimeout(() => {
+      timerTimeout = null;
+      self.registration.showNotification(e.data.title || 'GritTrack', {
+        body: e.data.body || 'REST COMPLETE — GET BACK ON IT 💪',
+        icon: '/static/icon-192.png',
+        badge: '/static/icon-192.png',
+        tag: 'rest-timer',
+        renotify: true,
+      });
+    }, e.data.delay);
+  } else if (e.data.type === 'CANCEL_TIMER') {
+    if (timerTimeout) { clearTimeout(timerTimeout); timerTimeout = null; }
+  }
+});
+
 // Fetch strategy:
 //   /api/*  → network first (fresh data), fall back to offline response
 //   static  → cache first, fall back to network
