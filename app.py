@@ -1,6 +1,7 @@
 import os
 import json
-from datetime import datetime, timezonefrom flask import Flask, render_template, request, jsonify, redirect, url_for
+from datetime import datetime, timezone
+from flask import Flask, render_template, request, jsonify, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import (LoginManager, UserMixin, login_user,
                          logout_user, login_required, current_user)
@@ -13,7 +14,7 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-key-change-me-in-pr
 
 _db_url = os.environ.get('DATABASE_URL', 'sqlite:///grittrack.db')
 if _db_url.startswith('postgres://'):          # Railway legacy URL format
-    _db_url = _db_url.replace('postgres://', 'postgresql://', 1)
+    _db_url = _db_url.replace('postgres://', 'postgresql+psycopg://', 1)
 app.config['SQLALCHEMY_DATABASE_URI'] = _db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
